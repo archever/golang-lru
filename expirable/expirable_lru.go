@@ -161,6 +161,27 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	return
 }
 
+// Get looks up a key's value from the cache. and refresh ttl
+func (c *LRU[K, V]) GetAndRefresh(key K) (value V, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+
+	// Check for existing item
+	if ent, ok := c.items[key]; ok {
+		// Expired item check
+		if time.Now().After(ent.ExpiresAt) {
+			return value, false
+		}
+		c.evictList.MoveToFront(ent)
+		c.removeFromBucket(ent) // remove the entry from its current bucket as expiresAt is renewed
+		ent.ExpiresAt = now.Add(c.ttl)
+		c.addToBucket(ent)
+		return ent.Value, true
+	}
+	return
+}
+
 // Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
 func (c *LRU[K, V]) Contains(key K) (ok bool) {
